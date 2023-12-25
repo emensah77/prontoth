@@ -55,6 +55,14 @@ exports.handleMessage = (ws, message) => {
             addTurret(message.publish.addTurret);
             broadcastGameState();
         }
+        if (message.publish.upgradeTurret) {
+            upgradeTurret(message.publish.upgradeTurret.turretId);
+            broadcastGameState();
+        }
+        if (message.publish.popLoon) {
+            popLoon(message.publish.popLoon.turretId);
+            broadcastGameState();
+        }
     }
 };
 
@@ -66,7 +74,22 @@ exports.handleDisconnect = (ws) => {
     clients = clients.filter(client => client !== ws);
 };
 
+function upgradeTurret(turretId) {
+    console.log('Upgrading turret:', turretId);
+    const turret = gameState.turrets.find(t => t.id === turretId);
+    if (turret) {
+        turret.upgrade();
+    }
+}
 
+function popLoon(turretId) {
+    console.log('Increasing loon:', turretId,);
+    const turret = gameState.turrets.find(t => t.id === turretId);
+    if (turret) {
+        turret.popLoon();
+        console.log('Popped loon:', turret.poppedLoons);
+    }
+}
 // Spawn a new Loon
 function spawnLoon() {
     const id = generateUniqueId();

@@ -36,3 +36,30 @@
     transform: rotate(360deg);
   }
 }
+.game-container {
+  text-align: center;
+}
+
+.game-title {
+  font-size: 2em;
+  color: #4caf50;
+}
+
+.game-area {
+  position: relative;
+  width: 800px; /* Match the canvas width */
+  margin: auto;
+  border: 1px solid #ccc;
+}
+
+.upgrade-button {
+  position: absolute;
+  z-index: 10;
+  background-color: green;
+  color: white;
+  border: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 0.8em;
+}

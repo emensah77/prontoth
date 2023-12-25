@@ -1,18 +1,8 @@
-// gameLogic.js
-const WebSocket = require('ws'); // Import the WebSocket module
-
-
-// Import the Loon and Turret classes
+const WebSocket = require('ws');
 const Loon = require('../models/Loon');
 const Turret = require('../models/Turret');
 
-let clients = [];
-
-
-let gameState = {
-    loons: [],
-    turrets: []
-};
+let clients = {};
 
 // Utility function to generate unique IDs
 const generateUniqueId = () => {
@@ -21,114 +11,106 @@ const generateUniqueId = () => {
 
 // Initialize a game session for a new client
 exports.initializeSession = (ws) => {
-    console.log('New game session initialized');
-    clients.push(ws);
-    sendGameState(ws); // Send the current state to the new client
+    const clientId = generateUniqueId();
+    console.log('New game session initialized for client:', clientId);
+    clients[clientId] = {
+        ws: ws,
+        gameState: {
+            loons: [],
+            turrets: []
+        }
+    };
+    sendGameState(clientId);
 };
 
-function sendGameState(ws) {
-    if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ loonState: gameState.loons }));
+function sendGameState(clientId) {
+    const client = clients[clientId];
+    if (client && client.ws.readyState === WebSocket.OPEN) {
+        client.ws.send(JSON.stringify({
+            loonState: client.gameState.loons,
+            turretState: client.gameState.turrets
+        }));
     }
-}
-
-function broadcastGameState() {
-    console.log('Broadcasting game state to all clients');
-    clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-                loonState: gameState.loons,
-                turretState: gameState.turrets // Make sure to include turrets in the broadcast
-            }));
-        }
-    });
 }
 
 // Handle incoming WebSocket messages
 exports.handleMessage = (ws, message) => {
     console.log('Received WebSocket message:', message);
 
-    if (message.subscribe === 'loonState') {
-        sendGameState(ws);
-    } else if (message.publish) {
+    const clientId = Object.keys(clients).find(id => clients[id].ws === ws);
+    if (!clientId) return;
+
+    const client = clients[clientId];
+
+    if (message.publish) {
         if (message.publish.addTurret) {
-            addTurret(message.publish.addTurret);
-            broadcastGameState();
+            addTurret(client.gameState, message.publish.addTurret);
         }
         if (message.publish.upgradeTurret) {
-            upgradeTurret(message.publish.upgradeTurret.turretId);
-            broadcastGameState();
+            upgradeTurret(client.gameState, message.publish.upgradeTurret.turretId);
         }
         if (message.publish.popLoon) {
-            popLoon(message.publish.popLoon.turretId);
-            broadcastGameState();
+            popLoon(client.gameState, message.publish.popLoon.turretId);
         }
     }
+
+    sendGameState(clientId);
 };
-
-
 
 // Handle client disconnection
 exports.handleDisconnect = (ws) => {
-    console.log('Client disconnected');
-    clients = clients.filter(client => client !== ws);
+    const clientId = Object.keys(clients).find(id => clients[id].ws === ws);
+    if (clientId) {
+        console.log('Client disconnected:', clientId);
+        delete clients[clientId];
+    }
 };
 
-function upgradeTurret(turretId) {
-    console.log('Upgrading turret:', turretId);
+function addTurret(gameState, turretData) {
+    const id = generateUniqueId();
+    const newTurret = new Turret(id, turretData.x, turretData.y);
+    gameState.turrets.push(newTurret);
+}
+
+function upgradeTurret(gameState, turretId) {
     const turret = gameState.turrets.find(t => t.id === turretId);
     if (turret) {
         turret.upgrade();
     }
 }
 
-function popLoon(turretId) {
-    console.log('Increasing loon:', turretId,);
+function popLoon(gameState, turretId) {
     const turret = gameState.turrets.find(t => t.id === turretId);
     if (turret) {
         turret.popLoon();
-        console.log('Popped loon:', turret.poppedLoons);
     }
 }
+
 // Spawn a new Loon
-function spawnLoon() {
+function spawnLoon(gameState) {
     const id = generateUniqueId();
-    const position_x = 0; // Define the starting x position
-    const position_y = Math.random() * 600; // Random y position within canvas height
-    const level = Math.random() < 0.1 ? 2 : 1; // 10% chance for level 2
+    const position_x = 0;
+    const position_y = Math.random() * 600;
+    const level = Math.random() < 0.1 ? 2 : 1;
     const loon = new Loon(id, position_x, position_y, level);
     gameState.loons.push(loon);
 }
 
-// Update the game state
-function updateGameState() {
-    // Move each Loon
-    gameState.loons.forEach(loon => {
-        loon.position_x += 2; // Move to the right by 2 units
-    });
-
-    // Filter out Loons that have moved off the canvas
-    gameState.loons = gameState.loons.filter(loon => loon.position_x < 800); // Assuming canvas width is 800
-}
-
 // Regularly update the game state and spawn new Loons
 setInterval(() => {
-    updateGameState();
-    spawnLoon();
-    broadcastGameState(); // Broadcast the updated game state
+    Object.keys(clients).forEach(clientId => {
+        const client = clients[clientId];
+        if (client) {
+            const gameState = client.gameState;
+            gameState.loons.forEach(loon => loon.position_x += 2);
+            gameState.loons = gameState.loons.filter(loon => loon.position_x < 800);
+            spawnLoon(gameState);
+            sendGameState(clientId);
+        }
+    });
 }, 1000);
 
-function addTurret(turretData) {
-    console.log('Adding turret with data:', turretData); // Log for debugging
-    const id = generateUniqueId();
-    const newTurret = new Turret(id, turretData.x, turretData.y);
-    gameState.turrets.push(newTurret);
-}
-
-
-
-
 // Export the getGameState function
-exports.getGameState = () => {
-    return gameState;
+exports.getGameState = (clientId) => {
+    return clients[clientId] ? clients[clientId].gameState : null;
 };

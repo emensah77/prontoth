@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import GameCanvas from './GameCanvas';
 import TurretDragAndDrop from './TurretDragAndDrop';
 import useWebSocket from './useWebsocket';
-
+import './App.css';
 const loonRadius = 14; // Assuming a radius for the loons
 const turretRadius = 35; // Assuming a radius for the turrets
 
@@ -11,6 +11,7 @@ const App = () => {
   const canvasRef = useRef(null);
   const canvasWidth = 800; // Define canvas width
   const turretRange = 100; // Define the range within which turrets can pop 'Loons'
+
 
   const [gameState, setGameState] = useState({
     loons: [],
@@ -21,6 +22,20 @@ const App = () => {
   const { socket, messages } = useWebSocket('ws://localhost:3001', setGameState);
 
 
+  // function to upgrade turrets
+  const upgradeTurret = (turretId) => {
+    setGameState(prevState => ({
+      ...prevState,
+      turrets: prevState.turrets.map(turret => 
+        turret.id === turretId ? { ...turret, level: turret.level + 1 } : turret)
+    }));
+    socket.send(JSON.stringify({ publish: { upgradeTurret: { turretId } } }));
+  };
+
+  // Function to send a message to the server to increment the poppedLoons count
+const popLoon = useCallback((turretId) => {
+  socket.send(JSON.stringify({ publish: { popLoon: { turretId } } }));
+}, [socket]);
 
 
 
@@ -64,7 +79,8 @@ const App = () => {
 
   // Function to handle firing of turrets
  // Function to handle firing of turrets
- const fireTurrets = useCallback(() => {
+ // Function to handle firing of turrets
+const fireTurrets = useCallback(() => {
   setGameState(prevState => {
     const newHitLoons = prevState.hitLoons.map(loon => loon.id);
     let hitsDetected = false;
@@ -73,10 +89,12 @@ const App = () => {
       const nearestLoon = fireTurretAtNearestLoon(turret, prevState.loons);
       if (nearestLoon) {
         const distance = Math.hypot(nearestLoon.position_x - turret.position_x, nearestLoon.position_y - turret.position_y);
-        //console.log(`Checking hit: Turret at (${turret.position_x}, ${turret.position_y}) - Loon at (${nearestLoon.position_x}, ${nearestLoon.position_y}), Distance: ${distance}`);
-        if (!newHitLoons.includes(nearestLoon.id) && distance < turretRange) {
-          //console.log('Loon hit:', nearestLoon);
+        // Check if the turret level is sufficient to hit the loon
+        if (!newHitLoons.includes(nearestLoon.id) && distance < turretRange && turret.level >= nearestLoon.level) {
           newHitLoons.push(nearestLoon.id);
+          hitsDetected = true;
+          popLoon(turret.id); // Call popLoon to send a message to the server
+          console.log('pop count', turret.poppedLoons, turret.id);
         }
       }
     });
@@ -90,8 +108,7 @@ const App = () => {
 
     return { ...prevState, loons: remainingLoons, hitLoons: hitLoonObjects };
   });
-}, [setGameState, fireTurretAtNearestLoon, turretRange]);
-
+}, [setGameState, fireTurretAtNearestLoon, turretRange, popLoon]);
 
 
  // Add fireTurretAtNearestLoon to dependency array
@@ -142,12 +159,30 @@ const App = () => {
 
 
   return (
-    <div>
-      <h1>Loons Tower Defense</h1>
+    <div className="game-container">
+    <h1 className="game-title">Loons Tower Defense</h1>
+    <div className="game-area" style={{ position: 'relative' }}>
+      <GameCanvas 
+        ref={canvasRef} 
+        gameState={gameState}
+      />
+      {gameState.turrets.map(turret => (
+        <button 
+          key={turret.id}
+          className="upgrade-button"
+          style={{
+            left: `${turret.position_x - 10}px`, 
+            top: `${turret.position_y - 50}px`, 
+          }}
+          onClick={() => upgradeTurret(turret.id)}
+        >
+          Upgrade
+        </button>
+      ))}
       <TurretDragAndDrop onTurretPlaced={handleTurretPlaced} canvasRef={canvasRef} />
-      <GameCanvas ref={canvasRef} gameState={gameState} />
-      {/* Additional game components */}
     </div>
+    {/* Other components */}
+  </div>
   );
 };
 

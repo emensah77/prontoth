@@ -6,6 +6,8 @@ Features
 Drag and drop turrets to pop moving 'Loons'.
 Upgrade turrets to pop higher-level 'Loons'.
 Level 2 turrets are purple and Level 2 loons are black.
+You can upgrade a turret after it has hit a certain number of loons.
+Loons that are hit are yellow in color.
 
 Live Demo
 The game is deployed and can be played at: https://prontoth.vercel.app/
